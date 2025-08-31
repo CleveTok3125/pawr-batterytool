@@ -67,8 +67,6 @@ while true; do
     usb_type=$(get_value "$uevent" POWER_SUPPLY_USB_TYPE)
     scope=$(get_value "$uevent" POWER_SUPPLY_SCOPE)
 
-    hours=$((ttf_now / 60))
-    minutes=$((ttf_now % 60))
     voltage_now_v=$(awk "BEGIN {printf \"%.2f\", $voltage_now/1000000}")
     voltage_ocv_v=$(awk "BEGIN {printf \"%.2f\", $voltage_ocv/1000000}")
     voltage_max_v=$(awk "BEGIN {printf \"%.2f\", $voltage_max/1000000}")
@@ -81,6 +79,14 @@ while true; do
     full_now_ma=$((full_now/1000))
     full_design_ma=$((full_design/1000))
     capacity_percent=$(awk "BEGIN {printf \"%.1f\", ($full_now/$full_design)*100}")
+
+	if [ "$status" = "Charging" ] || [ "$status" = "Full" ]; then
+	    hours=$((ttf_now / 60))
+	    minutes=$((ttf_now % 60))
+	    full_after="${hours}h ${minutes}m"
+	else
+	    full_after="N/A"
+	fi
 
     [ $CLEAR_SCREEN -eq 1 ] && clear
 
@@ -95,7 +101,7 @@ USB Type        : $usb_type
 Voltage         : $voltage_now_v V
 Current         : $current_now_a A
 Power           : $power_calc W
-Full after      : ${hours}h ${minutes}m
+Full after      : $full_after
 Temperature     : $temp_c °C
 Cycle Count     : $cycle_count
 Maximum Capacity: $full_now_ma mAh ($capacity_percent%)
@@ -126,7 +132,7 @@ Cycle Count              : $cycle_count
 Full Design Capacity     : $full_design_ma mAh
 Full Now                 : $full_now_ma mAh
 Model                    : $model
-Time to Full Now         : ${hours}h ${minutes}m
+Time to Full Now         : $ttf_now
 Power Now                : $power_now_w W
 Online                   : $online
 Input Current Limit      : $input_current_limit
