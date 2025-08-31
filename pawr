@@ -80,7 +80,7 @@ while true; do
     full_design_ma=$((full_design/1000))
     capacity_percent=$(awk "BEGIN {printf \"%.1f\", ($full_now/$full_design)*100}")
 
-	if [ "$status" = "Charging" ] || [ "$status" = "Full" ]; then
+	if [ "$status" = "Charging" ] && [ "$ttf_now" -gt 0 ] && [ "$ttf_now" -lt 1440 ]; then
 	    hours=$((ttf_now / 60))
 	    minutes=$((ttf_now % 60))
 	    full_after="${hours}h ${minutes}m"
