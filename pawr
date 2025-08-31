@@ -1,0 +1,143 @@
+#!/system/bin/sh
+
+INTERVAL=1
+LOGGING=0
+CLEAR_SCREEN=1
+DETAILED_MODE=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --log) LOGGING=1 ;;
+        --no-clear) CLEAR_SCREEN=0 ;;
+        --interval)
+            shift
+            INTERVAL=$1
+            ;;
+        --detailed) DETAILED_MODE=1 ;;
+        *)
+            echo "Usage: $0 [--log] [--no-clear] [--interval N] [--detailed]"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+SCRIPT_DIR=$(dirname "$0")
+LOG_FILE="$SCRIPT_DIR/charge_log.csv"
+
+if [ $LOGGING -eq 1 ] && [ ! -f "$LOG_FILE" ]; then
+    echo "Time,POWER_SUPPLY_NAME,POWER_SUPPLY_TYPE,POWER_SUPPLY_STATUS,POWER_SUPPLY_HEALTH,POWER_SUPPLY_PRESENT,POWER_SUPPLY_CHARGE_TYPE,POWER_SUPPLY_CAPACITY,POWER_SUPPLY_VOLTAGE_OCV,POWER_SUPPLY_VOLTAGE_NOW,POWER_SUPPLY_VOLTAGE_MAX,POWER_SUPPLY_CURRENT_NOW,POWER_SUPPLY_CHARGE_CONTROL_LIMIT,POWER_SUPPLY_CHARGE_CONTROL_LIMIT_MAX,POWER_SUPPLY_CONSTANT_CHARGE_CURRENT,POWER_SUPPLY_TEMP,POWER_SUPPLY_TECHNOLOGY,POWER_SUPPLY_CHARGE_COUNTER,POWER_SUPPLY_CYCLE_COUNT,POWER_SUPPLY_CHARGE_FULL_DESIGN,POWER_SUPPLY_CHARGE_FULL,POWER_SUPPLY_MODEL_NAME,POWER_SUPPLY_TIME_TO_FULL_NOW,POWER_SUPPLY_POWER_NOW,POWER_CALC,POWER_SUPPLY_ONLINE,POWER_SUPPLY_VOLTAGE_MIN,POWER_SUPPLY_CURRENT_MAX,POWER_SUPPLY_INPUT_CURRENT_LIMIT,POWER_SUPPLY_USB_TYPE,POWER_SUPPLY_SCOPE" > "$LOG_FILE"
+fi
+
+get_value() {
+    echo "$1" | grep "^$2=" | cut -d= -f2 | head -n1
+}
+
+while true; do
+    t=$(date +"%Y-%m-%d %H:%M:%S")
+    uevent=$(su -c "cat /sys/class/power_supply/*/uevent")
+
+    name=$(get_value "$uevent" POWER_SUPPLY_NAME)
+    type=$(get_value "$uevent" POWER_SUPPLY_TYPE)
+    status=$(get_value "$uevent" POWER_SUPPLY_STATUS)
+    health=$(get_value "$uevent" POWER_SUPPLY_HEALTH)
+    present=$(get_value "$uevent" POWER_SUPPLY_PRESENT)
+    charge_type=$(get_value "$uevent" POWER_SUPPLY_CHARGE_TYPE)
+    capacity=$(get_value "$uevent" POWER_SUPPLY_CAPACITY)
+    voltage_ocv=$(get_value "$uevent" POWER_SUPPLY_VOLTAGE_OCV)
+    voltage_now=$(get_value "$uevent" POWER_SUPPLY_VOLTAGE_NOW)
+    voltage_max=$(get_value "$uevent" POWER_SUPPLY_VOLTAGE_MAX)
+    current_now=$(get_value "$uevent" POWER_SUPPLY_CURRENT_NOW)
+    charge_control_limit=$(get_value "$uevent" POWER_SUPPLY_CHARGE_CONTROL_LIMIT)
+    charge_control_limit_max=$(get_value "$uevent" POWER_SUPPLY_CHARGE_CONTROL_LIMIT_MAX)
+    constant_charge_current=$(get_value "$uevent" POWER_SUPPLY_CONSTANT_CHARGE_CURRENT)
+    temp=$(get_value "$uevent" POWER_SUPPLY_TEMP)
+    tech=$(get_value "$uevent" POWER_SUPPLY_TECHNOLOGY)
+    charge_counter=$(get_value "$uevent" POWER_SUPPLY_CHARGE_COUNTER)
+    cycle_count=$(get_value "$uevent" POWER_SUPPLY_CYCLE_COUNT)
+    full_design=$(get_value "$uevent" POWER_SUPPLY_CHARGE_FULL_DESIGN)
+    full_now=$(get_value "$uevent" POWER_SUPPLY_CHARGE_FULL)
+    model=$(get_value "$uevent" POWER_SUPPLY_MODEL_NAME)
+    ttf_now=$(get_value "$uevent" POWER_SUPPLY_TIME_TO_FULL_NOW)
+    power_now=$(get_value "$uevent" POWER_SUPPLY_POWER_NOW)
+    online=$(get_value "$uevent" POWER_SUPPLY_ONLINE)
+    voltage_min=$(get_value "$uevent" POWER_SUPPLY_VOLTAGE_MIN)
+    current_max=$(get_value "$uevent" POWER_SUPPLY_CURRENT_MAX)
+    input_current_limit=$(get_value "$uevent" POWER_SUPPLY_INPUT_CURRENT_LIMIT)
+    usb_type=$(get_value "$uevent" POWER_SUPPLY_USB_TYPE)
+    scope=$(get_value "$uevent" POWER_SUPPLY_SCOPE)
+
+    hours=$((ttf_now / 60))
+    minutes=$((ttf_now % 60))
+    voltage_now_v=$(awk "BEGIN {printf \"%.2f\", $voltage_now/1000000}")
+    voltage_ocv_v=$(awk "BEGIN {printf \"%.2f\", $voltage_ocv/1000000}")
+    voltage_max_v=$(awk "BEGIN {printf \"%.2f\", $voltage_max/1000000}")
+    voltage_min_v=$(awk "BEGIN {printf \"%.2f\", $voltage_min/1000000}")
+    current_now_a=$(awk "BEGIN {printf \"%.2f\", $current_now/1000000}")
+    power_calc=$(awk "BEGIN {printf \"%.2f\", $voltage_now_v * $current_now_a}")
+    constant_charge_current_a=$(awk "BEGIN {printf \"%.2f\", $constant_charge_current/1000000}")
+    power_now_w=$(awk "BEGIN {printf \"%.2f\", $power_now/1000000}")
+    temp_c=$(awk "BEGIN {printf \"%.1f\", $temp/10}")
+    full_now_ma=$((full_now/1000))
+    full_design_ma=$((full_design/1000))
+    capacity_percent=$(awk "BEGIN {printf \"%.1f\", ($full_now/$full_design)*100}")
+
+    [ $CLEAR_SCREEN -eq 1 ] && clear
+
+    if [ $DETAILED_MODE -eq 0 ]; then
+        cat <<EOF
+Time            : $t
+Battery Level   : $capacity%
+Health          : $health
+Status          : $status
+Charge Type     : $charge_type
+USB Type        : $usb_type
+Voltage         : $voltage_now_v V
+Current         : $current_now_a A
+Power           : $power_calc W
+Full after      : ${hours}h ${minutes}m
+Temperature     : $temp_c °C
+Cycle Count     : $cycle_count
+Maximum Capacity: $full_now_ma mAh ($capacity_percent%)
+EOF
+    else
+        cat <<EOF
+Time                     : $t
+Name                     : $name
+Type                     : $type
+Status                   : $status
+Health                   : $health
+Present                  : $present
+Charge Type              : $charge_type
+Full Capacity            : $capacity%
+Voltage OCV              : $voltage_ocv_v V
+Voltage Now              : $voltage_now_v V
+Voltage Max              : $voltage_max_v V
+Voltage Min              : $voltage_min_v V
+Current Now              : $current_now_a A
+Power (calculated)       : $power_calc W
+Charge Control Limit     : $charge_control_limit
+Charge Control Limit Max : $charge_control_limit_max
+Constant Charge Current  : $constant_charge_current_a A
+Temperature              : $temp_c °C
+Technology               : $tech
+Charge Counter           : $charge_counter
+Cycle Count              : $cycle_count
+Full Design Capacity     : $full_design_ma mAh
+Full Now                 : $full_now_ma mAh
+Model                    : $model
+Time to Full Now         : ${hours}h ${minutes}m
+Power Now                : $power_now_w W
+Online                   : $online
+Input Current Limit      : $input_current_limit
+USB Type                 : $usb_type
+Scope                    : $scope
+EOF
+    fi
+
+    if [ $LOGGING -eq 1 ]; then
+        echo "$t,$name,$type,$status,$health,$present,$charge_type,$capacity,$voltage_ocv_v,$voltage_now_v,$voltage_max_v,$current_now_a,$charge_control_limit,$charge_control_limit_max,$constant_charge_current_a,$temp_c,$tech,$charge_counter,$cycle_count,$full_design_ma,$full_now_ma,$model,$ttf_now,$power_now_w,$power_calc,$online,$voltage_min_v,$current_max,$input_current_limit,$usb_type,$scope" >> "$LOG_FILE"
+    fi
+
+    sleep $INTERVAL
+done
